@@ -1,0 +1,19 @@
+[package]
+name = "mole"
+version = "0.1.0"
+edition = "2024"
+description = "SSH tunnel manager CLI"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+clap_complete = { version = "4.5", features = ["unstable-dynamic"] }
+dialoguer = { version = "0.12", features = ["fuzzy-select"] }
+colored = "3"
+console = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+anyhow = "1.0"
+dirs = "6.0"
+glob = "0.3"
+libc = "0.2"
+whoami = "1.5"
