@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/mole.png" width="200" />
+</p>
+
 # mole
 
 SSH tunnel manager CLI. Discovers tunnels from your `~/.ssh/config` and lets you start, stop, and monitor them with simple commands.
@@ -138,10 +142,10 @@ The `--group`/`-g` flag works with `up`, `down`, `restart`, `list`, `enable`, an
 
 Most commands work on macOS and Linux. The exceptions:
 
-| Feature | macOS | Linux |
-|---------|-------|-------|
+| Feature               | macOS         | Linux             |
+| --------------------- | ------------- | ----------------- |
 | `mole enable/disable` | launchd plist | not yet supported |
-| `mole up --persist` | launchd plist | not yet supported |
+| `mole up --persist`   | launchd plist | not yet supported |
 
 On Linux, you can achieve the same persistence with a systemd user service:
 
@@ -191,16 +195,19 @@ All fields are optional — if the file doesn't exist or a field is missing, def
 Completions include subcommands, flags, and tunnel names from your SSH config. One command to set up:
 
 **zsh** (add to `~/.zshrc`):
+
 ```bash
 source <(mole completions zsh)
 ```
 
 **bash** (add to `~/.bashrc`):
+
 ```bash
 source <(mole completions bash)
 ```
 
 **fish** (run once):
+
 ```fish
 mole completions fish > ~/.config/fish/completions/mole.fish
 ```
