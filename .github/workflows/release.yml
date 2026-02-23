@@ -1,0 +1,179 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="mole-${VERSION}-${{ matrix.target }}.tar.gz"
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/mole dist/
+          cp README.md LICENSE dist/
+          cd dist
+          tar czf "../${ARCHIVE}" *
+          cd ..
+          shasum -a 256 "${ARCHIVE}" > "${ARCHIVE}.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mole-${{ matrix.target }}
+          path: |
+            mole-*.tar.gz
+            mole-*.tar.gz.sha256
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            mole-*.tar.gz
+            mole-*.tar.gz.sha256
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for release assets
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          # Wait for release assets to be available
+          for i in $(seq 1 30); do
+            COUNT=$(gh api "repos/${{ github.repository }}/releases/tags/${TAG}" \
+              --jq '.assets | length' 2>/dev/null || echo "0")
+            if [ "$COUNT" -ge 6 ]; then
+              echo "All 6 assets found"
+              break
+            fi
+            echo "Found ${COUNT}/6 assets, waiting... (attempt ${i}/30)"
+            sleep 10
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download checksums and generate formula
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+          BASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}"
+
+          # Download checksum files
+          gh release download "${TAG}" \
+            --repo "${{ github.repository }}" \
+            --pattern "*.sha256"
+
+          # Extract SHA256 values
+          SHA_ARM=$(awk '{print $1}' "mole-${VERSION}-aarch64-apple-darwin.tar.gz.sha256")
+          SHA_X86=$(awk '{print $1}' "mole-${VERSION}-x86_64-apple-darwin.tar.gz.sha256")
+          SHA_LINUX=$(awk '{print $1}' "mole-${VERSION}-x86_64-unknown-linux-gnu.tar.gz.sha256")
+
+          # Generate formula
+          cat > mole.rb << FORMULA
+          class Mole < Formula
+            desc "SSH tunnel manager CLI"
+            homepage "https://github.com/twbot/mole"
+            version "${VERSION}"
+            license "MIT"
+
+            depends_on "autossh"
+
+            on_macos do
+              on_arm do
+                url "${BASE_URL}/mole-${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${SHA_ARM}"
+              end
+              on_intel do
+                url "${BASE_URL}/mole-${VERSION}-x86_64-apple-darwin.tar.gz"
+                sha256 "${SHA_X86}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "${BASE_URL}/mole-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${SHA_LINUX}"
+              end
+            end
+
+            def install
+              bin.install "mole"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/mole --version")
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' mole.rb
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push formula to homebrew-tap
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          # Clone the tap repo
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/twbot/homebrew-tap.git" tap
+          cd tap
+
+          mkdir -p Formula
+          cp ../mole.rb Formula/mole.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/mole.rb
+          git commit -m "mole ${VERSION}"
+          git push
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

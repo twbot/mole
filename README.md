@@ -8,6 +8,15 @@ SSH tunnel manager CLI. Discovers tunnels from your `~/.ssh/config` and lets you
 
 ## Install
 
+### Homebrew (macOS)
+
+```bash
+brew tap twbot/tap
+brew install mole
+```
+
+### From source
+
 ```bash
 cargo install --path .
 ```
