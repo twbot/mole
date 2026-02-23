@@ -11,8 +11,7 @@ SSH tunnel manager CLI. Discovers tunnels from your `~/.ssh/config` and lets you
 ### Homebrew (macOS)
 
 ```bash
-brew tap twbot/tap
-brew install mole
+brew install twbot/tap/mole
 ```
 
 ### From source
